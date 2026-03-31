@@ -64,11 +64,7 @@ class OTP:
 
 		data_to_decrypt = self.get_content(key_path)
 		secret = f.decrypt(data_to_decrypt) # Decrypt the data
-		print(f"Decrypted secret: {secret}")
-		
-		# Convert hex secret to raw bytes
-		# key_bytes = bytes.fromhex("66ac2ee810f3874c03d43688566ffa82eff464a61e3004ed1d3825aaacce9859")
-		key_bytes = bytes.fromhex(secret.strip())
+		print(f"Decrypted secret: {secret.decode()}")
 
 		# Calculate the Counter (8-byte binary)
 		print(time.time())
@@ -76,20 +72,23 @@ class OTP:
 		counter_bytes = struct.pack(">Q", intervals_no) # >Q means Big-Endian Unsigned Long Long
 
 		# HMAC-SHA1  Generate an HMAC-SHA-1 value Let HS = HMAC-SHA-1(K,C)
-		hmac_result = hmac.new(key_bytes, counter_bytes, hashlib.sha1).digest()
+		hmac_result = hmac.new(secret, counter_bytes, hashlib.sha1).digest()
 
-		# 4. Dynamic Truncation (The technical part)
-		# Get the last 4 bits of the HMAC to use as an 'offset'
-		offset = hmac_result[-1] & 0x0F
+		# Dynamic Truncation (The technical part)
+		# 1. Get the offset (last 4 bits of the last byte)
+		offset = hmac_result[19] & 0xf
 		
-		# Grab 4 bytes starting from that offset
-		truncated_hash = hmac_result[offset:offset + 4]
+		# 2. Extract 4 bytes starting at offset
+		p_bytes = hmac_result[offset : offset + 4]
 		
-		# Convert to integer and mask the most significant bit (per RFC)
-		code = struct.unpack(">I", truncated_hash)[0] & 0x7FFFFFFF
+		# 3. Convert to 32-bit integer (Big-Endian)
+		p_num = struct.unpack(">I", p_bytes)[0]
 		
+		# 4. Mask the MSB (keep 31 bits)
+		binary_code = p_num & 0x7fffffff
+			
 		# Crop to 6 digits
-		final_otp = code % 1000000
+		final_otp = binary_code % 1000000
 		return f"{final_otp:06d}" # Ensure leading zeros
 
 
