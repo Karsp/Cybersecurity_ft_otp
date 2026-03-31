@@ -64,10 +64,8 @@ class OTP:
 
 		data_to_decrypt = self.get_content(key_path)
 		secret = f.decrypt(data_to_decrypt) # Decrypt the data
-		print(f"Decrypted secret: {secret.decode()}")
 
 		# Calculate the Counter (8-byte binary)
-		print(time.time())
 		intervals_no = int(time.time() // 30)
 		counter_bytes = struct.pack(">Q", intervals_no) # >Q means Big-Endian Unsigned Long Long
 
@@ -115,7 +113,7 @@ def main():
 		otp.encrypt_and_save(file_content)
 	elif args.k:
 		otp_value = otp.generate_totp(args.k)
-		print(f"Current OTP: {otp_value}")
+		print(f"{otp_value}")
 		pass
 
 
