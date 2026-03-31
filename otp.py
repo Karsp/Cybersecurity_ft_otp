@@ -6,9 +6,7 @@ import time
 import argparse
 import base64
 import hashlib
-from colorama import Fore, Style
 from cryptography.fernet import Fernet
-
 
 
 class OTP:
@@ -20,6 +18,20 @@ class OTP:
 		if not hasattr(cls, 'instance'):
 			cls.instance = super(OTP, cls).__new__(cls)
 		return cls.instance
+
+	def get_content(self, input_string):
+		# 1. Check if the string is a path to an existing file
+		if os.path.isfile(input_string):
+			try:
+				with open(input_string, 'r') as f:
+					# Read content and strip whitespace/newlines
+					return f.read().strip()
+			except Exception as e:
+				print(f"Error reading file: {e}")
+				return None
+		# 2. If it's not a file, assume the string itself is the key
+		return input_string.strip()
+
 	def encrypt_and_save(self, hex_key_content: str):
 		# calidar el contenido en hex y len
 		def is_valid_hex(hex_key_content):
@@ -64,14 +76,8 @@ def main():
 	# Create OTP instance and run
 	otp = OTP()
 	if args.g:
-		try:
-			with open(args.g, 'r') as file:
-				file_content = file.read()
-			otp.encrypt_and_save(file_content)
-		except FileNotFoundError:
-			print("Error: File not found.")
-		except Exception as e:
-			print(f"Error: {e}")
+		file_content = otp.get_content(args.g)
+		otp.encrypt_and_save(file_content)
 	elif args.k:
 		# Implement key loading logic here
 		pass
