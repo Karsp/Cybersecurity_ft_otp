@@ -7,7 +7,8 @@ import argparse
 import base64
 import hashlib
 from cryptography.fernet import Fernet
-
+import hmac
+import struct
 
 class OTP:
 	master_key = "Lalalalalala"
@@ -32,6 +33,10 @@ class OTP:
 		# 2. If it's not a file, assume the string itself is the key
 		return input_string.strip()
 
+	def string_to_fernet_key(self, password: str) -> bytes:
+			hashed = hashlib.sha256(password.encode()).digest() # Take the string and hash it with SHA-256 (always 32 bytes)
+			return base64.urlsafe_b64encode(hashed) # Convert those 32 bytes to URL-safe base64
+
 	def encrypt_and_save(self, hex_key_content: str):
 		# calidar el contenido en hex y len
 		def is_valid_hex(hex_key_content):
@@ -43,11 +48,8 @@ class OTP:
 			print("Invalid input.")
 			return
 
-		def string_to_fernet_key(password: str) -> bytes:
-			hashed = hashlib.sha256(password.encode()).digest() # Take the string and hash it with SHA-256 (always 32 bytes)
-			return base64.urlsafe_b64encode(hashed) # Convert those 32 bytes to URL-safe base64
 		
-		f = Fernet(string_to_fernet_key(self.master_key))
+		f = Fernet(self.string_to_fernet_key(self.master_key))
 		data_to_encrypt = hex_key_content.encode() # Fernet only accepts bytes, so encode your hex string
 		token = f.encrypt(data_to_encrypt) # Encrypt the data
 
@@ -55,6 +57,40 @@ class OTP:
 			key_file.write(token)
 		
 		print("Key was successfully saved in ft_otp.key.")
+
+	def generate_totp(self, key_path):
+		# Get decrypted key from file
+		f = Fernet(self.string_to_fernet_key(self.master_key))
+
+		data_to_decrypt = self.get_content(key_path)
+		secret = f.decrypt(data_to_decrypt) # Decrypt the data
+		print(f"Decrypted secret: {secret}")
+		
+		# Convert hex secret to raw bytes
+		# key_bytes = bytes.fromhex("66ac2ee810f3874c03d43688566ffa82eff464a61e3004ed1d3825aaacce9859")
+		key_bytes = bytes.fromhex(secret.strip())
+
+		# Calculate the Counter (8-byte binary)
+		print(time.time())
+		intervals_no = int(time.time() // 30)
+		counter_bytes = struct.pack(">Q", intervals_no) # >Q means Big-Endian Unsigned Long Long
+
+		# HMAC-SHA1  Generate an HMAC-SHA-1 value Let HS = HMAC-SHA-1(K,C)
+		hmac_result = hmac.new(key_bytes, counter_bytes, hashlib.sha1).digest()
+
+		# 4. Dynamic Truncation (The technical part)
+		# Get the last 4 bits of the HMAC to use as an 'offset'
+		offset = hmac_result[-1] & 0x0F
+		
+		# Grab 4 bytes starting from that offset
+		truncated_hash = hmac_result[offset:offset + 4]
+		
+		# Convert to integer and mask the most significant bit (per RFC)
+		code = struct.unpack(">I", truncated_hash)[0] & 0x7FFFFFFF
+		
+		# Crop to 6 digits
+		final_otp = code % 1000000
+		return f"{final_otp:06d}" # Ensure leading zeros
 
 
 def main():
@@ -79,7 +115,8 @@ def main():
 		file_content = otp.get_content(args.g)
 		otp.encrypt_and_save(file_content)
 	elif args.k:
-		# Implement key loading logic here
+		otp_value = otp.generate_totp(args.k)
+		print(f"Current OTP: {otp_value}")
 		pass
 
 
