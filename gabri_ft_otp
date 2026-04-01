@@ -63,7 +63,6 @@ def get_code(file: str) -> None:
     counter_bytes = struct.pack(">Q", (int(time.time()) // 30))
     digest = hmac.new(key, counter_bytes, sha1).digest()
     # print(digest)
-    print(key)
     offset = digest[-1] & 0x0F
     code = (
             ((digest[offset] & 0x7F) << 24) #mask with only 7 bits -rightmost byte
