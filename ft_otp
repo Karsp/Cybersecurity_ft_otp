@@ -61,11 +61,21 @@ class OTP:
 	def generate_totp(self, key_path):
 		# Get decrypted key from file
 		f = Fernet(self.string_to_fernet_key(self.master_key))
-		with open(key_path, 'rb') as key_file:
+		try:
+			with open(key_path, 'rb') as key_file:
 				data_to_decrypt = key_file.read()
-		secret = f.decrypt(data_to_decrypt) # Decrypt the data
-		secret = bytes.fromhex(secret.decode())
+		except Exception as e:
+			print(f"Error reading file: {e}")
+			return None
+		
+		try:
+			secret = f.decrypt(data_to_decrypt) # Decrypt the data
+			secret = bytes.fromhex(secret.decode())
 
+		except Exception as e:
+			print(f"InvalidToken: {e}")
+			return None
+		
 		# Calculate the Counter (8-byte binary)
 		counter = int(time.time() // 30)
 
