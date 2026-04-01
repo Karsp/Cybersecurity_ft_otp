@@ -14,7 +14,8 @@ class OTP:
 	master_key = "ov19R6w6TkplbdRwfiDS_61EApnlOooFnIZjkmXJPU4="
 
 	def __init__(self):
-		print(self.master_key)
+		pass
+		# print(self.master_key)
 		
 	def __new__(cls):
 		if not hasattr(cls, 'instance'):
@@ -65,26 +66,35 @@ class OTP:
 		with open(key_path, 'rb') as key_file:
 				data_to_decrypt = key_file.read()
 		secret = f.decrypt(data_to_decrypt) # Decrypt the data
-
+		secret = bytes.fromhex(secret.decode())
 		# Calculate the Counter (8-byte binary)
 		counter = int(time.time() // 30)
-
+		# counter = struct.pack(">Q", (int(time.time()) // 30))
+		
 		# HMAC-SHA1  Generate an HMAC-SHA-1 value Let HS = HMAC-SHA-1(K,C)
 		hmac_result = hmac.new(secret, counter.to_bytes(8, 'big'), hashlib.sha1).digest()
-
+		# hmac_result = hmac.new(secret, counter, hashlib.sha1).digest()
+		# print(hmac_result)
+		print(secret)
 		# Dynamic Truncation (The technical part)
 		# 1. Get the offset (last 4 bits of the last byte)
-		offset = hmac_result[-1] & 0x0f
+		offset = hmac_result[-1] & 0x0F
 		
 		# 2. Extract 4 bytes starting at offset
-		p_bytes = hmac_result[offset : offset + 4]
+		# p_bytes = hmac_result[offset : offset + 4]
 		
 		# 3. Convert to 32-bit integer (Big-Endian)
-		p_num = int.from_bytes(p_bytes, 'big')  & 0x7fffffff
+		# p_num = int.from_bytes(p_bytes, 'big')  & 0x7fffffff
 		
-			
+		# offset   =  hmac_result[19] & 0xf
+		bin_code = (hmac_result[offset]  & 0x7F) << 24
+		bin_code |= (hmac_result[offset+1] & 0xFF) << 16
+		bin_code |= (hmac_result[offset+2] & 0xFF) <<  8
+		bin_code |= (hmac_result[offset+3] & 0xFF)
+
 		# Crop to 6 digits
-		final_otp = p_num % 1000000
+		# final_otp = p_num % 1000000
+		final_otp = bin_code % 1000000
 		return f"{final_otp:06d}" # Ensure leading zeros
 
 
@@ -112,7 +122,6 @@ def main():
 	elif args.k:
 		otp_value = otp.generate_totp(args.k)
 		print(f"{otp_value}")
-		pass
 
 
 

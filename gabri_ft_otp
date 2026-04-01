@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+
+import argparse
+import hmac
+import os
+import struct
+import sys
+import time
+from hashlib import sha1
+from pathlib import Path
+
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+
+OUTPUT_FILE = "ft_otp.key"
+
+def error_exit(message: str, code: int = 1) -> None:
+    print(f"ft_otp: error: {message}", file=sys.stderr)
+    raise SystemExit(code)
+
+def read_binary(file: str) -> str:
+    try:
+        data = Path(file).read_bytes()
+        return data
+    except FileNotFoundError:
+        error_exit(f"file not found: {file}.")
+    except OSError as exc:
+        error_exit(f"could not read {file}: {exc}.")
+
+def decrypt_key(file: str) -> str:
+    #return Path(file).read_text(encoding="utf-8")
+
+    data = read_binary(file)
+
+    if len(data) < 16:
+        error_exit("invalid key file: too short to contain initialization vector.")
+    init_vector = data[:16]
+    ciphertext = data[16:] 
+
+    if len(ciphertext) == 0 or len(ciphertext) % 16 != 0:
+        error_exit("invalid key file: ciphertext length must be a non-zero multiple of 16 bytes.")
+    
+    cipher = Cipher(algorithms.AES(b"0123456789abcdef0123456789abcdef"), modes.CBC(init_vector))
+    decryptor = cipher.decryptor()
+    padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
+
+    try:
+        unpadder = padding.PKCS7(128).unpadder()
+        plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
+    except ValueError:
+        error_exit("invalid key file: incorrect padding.")
+    try:
+        key_hex = plaintext.decode("utf-8")
+    except UnicodeDecodeError:
+        error_exit("invalid key file: decrypted data is not valid UTF-8.")
+    validated_key = validate_hex(key_hex)
+    return validated_key
+
+def get_code(file: str) -> None:
+    key_hex = decrypt_key(file)
+    key = bytes.fromhex(key_hex)
+    counter_bytes = struct.pack(">Q", (int(time.time()) // 30))
+    digest = hmac.new(key, counter_bytes, sha1).digest()
+    # print(digest)
+    print(key)
+    offset = digest[-1] & 0x0F
+    code = (
+            ((digest[offset] & 0x7F) << 24) #mask with only 7 bits -rightmost byte
+            | ((digest[offset + 1] & 0xFF) << 16)
+            | ((digest[offset + 2] & 0xFF) << 8)
+            | (digest[offset + 3] & 0xFF)
+            ) % 1000000
+    otp = str(code).zfill(6)
+    print(otp)
+
+def encrypt_key(key_hex: str, output_path: str = OUTPUT_FILE) -> None:
+    #Path(output_path).write_text(key_hex)
+    #return
+
+    init_vector = os.urandom(16)
+    plaintext = key_hex.encode("utf-8")
+    padder = padding.PKCS7(128).padder()
+    padded = padder.update(plaintext) + padder.finalize()
+
+    cipher = Cipher(algorithms.AES(b"0123456789abcdef0123456789abcdef"), modes.CBC(init_vector))
+    encryptor = cipher.encryptor()
+    ciphertext = encryptor.update(padded) + encryptor.finalize()
+
+    final_data = init_vector + ciphertext
+
+    try:
+        Path(output_path).write_bytes(final_data)
+    except OSError as exc:
+        error_exit(f"could not write to {output_path}: {exc}.")
+
+def validate_hex(raw: str) -> str:
+    raw = raw.rstrip("/n")
+    if len(raw) < 64:
+        error_exit("key must be at least 64 hexadecimal characters.")
+    if len(raw) % 2 != 0:
+        error_exit("key must have an even number of hexadecimal characters.")
+    try:
+        bytes.fromhex(raw)
+    except ValueError:
+        error_exit("key must be a valid hexadecimal string.")
+    return raw.lower()
+
+def read_text(file:str) -> str:
+    try:
+        text = Path(file).read_text(encoding="utf-8")
+        return text
+    except FileNotFoundError:
+        error_exit(f"file not found: {file}.")
+    except OSError as exc:
+        error_exit(f"could not read {file}: {exc}.")
+
+def generate_key(file: str) -> None:
+    raw = read_text(file)
+    key_hex = validate_hex(raw)
+    encrypt_key(key_hex)
+    print(f"Key was successfully saved in {OUTPUT_FILE}.")
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="ft_otp")
+    group =  parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("-g", metavar="FILE", help="reads a hexadecimal key from FILE and saves encrypted ft_otp.key.")
+    group.add_argument("-k", metavar="FILE", help=" reads the encrypted key from FILE and prints current OTP.")
+    return parser
+
+def ft_otp() -> None:
+    args = build_parser().parse_args()
+
+    if args.g:
+        generate_key(args.g)
+    elif args.k:
+        get_code(args.k)
+
+if __name__ == "__main__":
+    ft_otp()
