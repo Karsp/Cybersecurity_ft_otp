@@ -45,7 +45,7 @@ class OTP:
 			return result
 
 		if not is_valid_hex(hex_key_content):
-			print("Invalid input.")
+			print("./ft_otp: error: key must be 64 hexadecimal characters.")
 			return
 
 		f = Fernet(self.string_to_fernet_key(self.master_key))
